@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from utils import pick_best
 import yt_dlp
@@ -16,13 +17,16 @@ def download(url, type="video"):
     ydl_opts = {
         "outtmpl": "%(title)s.%(ext)s",
         "quiet": True,
+        "ignoreerrors": True,
         "no_warnings": True,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict = ydl.extract_info(url, download=False)
-        formats = info_dict.get("formats", None)
-        best_video_fmt, best_audio_fmt = pick_best(formats)
+        if not info_dict or "formats" not in info_dict:
+            raise HTTPException(404, "Video not found or unavailable")
+        
+        best_video_fmt, best_audio_fmt = pick_best(info_dict["formats"])
 
         if type == "video":
             return best_video_fmt["url"]
@@ -38,25 +42,20 @@ async def get_download_url(video: VideoURL):
 
     return {"download_url": download(url, video.type)}
 
+templates = Jinja2Templates("templates")
 
 @app.get("/", response_class=HTMLResponse)
-async def get_download_url(url: str, type: str = "video"):
+async def get_download_url(request: Request, url: str, type: str = "video"):
     if not url:
         raise HTTPException(status_code=400, detail="No URL provided")
 
-    return (
-        """
-    <html>
-        <head>
-            <title>Download</title>
-        </head>
-        <body>
-            <a href="""
-        + download(url, type)
-        + """>Download</a>
-        </body>
-    </html>
-    """
+    try:
+        dl_url = download(url, type)
+    except HTTPException as exc:
+        raise exc
+    return templates.TemplateResponse(
+        "download.html",
+        {"request": request, "dl_url": dl_url}
     )
 
 
