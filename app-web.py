@@ -9,6 +9,7 @@ app = FastAPI()
 
 class VideoURL(BaseModel):
     url: str
+    type: str = "video"
 
 
 def download(url, type="video"):
@@ -35,7 +36,7 @@ async def get_download_url(video: VideoURL):
     if not url:
         raise HTTPException(status_code=400, detail="No URL provided")
 
-    return {"download_url": download(url, "video")}
+    return {"download_url": download(url, video.type)}
 
 
 @app.get("/", response_class=HTMLResponse)
