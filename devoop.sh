@@ -4,7 +4,7 @@ sudo apt update
 sudo apt install python3-pip nvm npm
 pip3 install yt-dlp uvicorn "fastapi[standard]" --break-system-packages
 npm install pm2 -g
-pm2 start "fastapi dev app-web.py" --name "downloader"
+pm2 start "fastapi dev app-web.py" --name "sc-vision-preview"
 
 chmod +x  /path/downloader/app-cli.py
 
