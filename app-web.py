@@ -20,11 +20,20 @@ def download(url, type="video"):
         "ignoreerrors": True,
         "no_warnings": True,
     }
+    
+    if "youtube" not in url:
+        ydl_opts["format"] = "best"
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict = ydl.extract_info(url, download=False)
         if not info_dict or "formats" not in info_dict:
             raise HTTPException(404, "Video not found or unavailable")
+        
+        if "youtube" not in url:
+            download_url = info_dict.get('url', None)
+            if not download_url:
+                raise HTTPException(status_code=404, detail="Download URL not found")
+            return download_url
         
         best_video_fmt, best_audio_fmt = pick_best(info_dict["formats"])
 
