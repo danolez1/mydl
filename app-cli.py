@@ -19,7 +19,14 @@ def download(url, type="video"):
             }
         ]
 
+    if "youtube" not in url:
+        ydl_opts["format"] = "best"
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        if "youtube" not in url:
+            ydl.download([url])
+            return
+            
         info_dict = ydl.extract_info(url, download=False)
         formats = info_dict.get("formats", None)
         best_video_fmt, best_audio_fmt = pick_best(formats)
