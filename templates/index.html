@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>mydl</title>
+    <style>
+      body{font-family:system-ui,sans-serif;max-width:480px;margin:4rem auto;padding:0 1rem}
+      input,select,button{font-size:1rem;padding:.5rem;width:100%;box-sizing:border-box;margin:.25rem 0}
+      button{cursor:pointer}
+    </style>
+  </head>
+  <body>
+    <h1>mydl</h1>
+    <form action="/dl" method="get">
+      <input name="url" placeholder="paste URL" required autofocus>
+      <select name="type">
+        <option value="video">video (highest quality)</option>
+        <option value="audio">audio</option>
+      </select>
+      <button type="submit">download</button>
+    </form>
+    <p style="font-size:.85rem;color:#666">YouTube streams through server (merged mp4). Other sites return direct URL.</p>
+  </body>
+</html>

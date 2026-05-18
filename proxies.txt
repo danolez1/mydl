@@ -1,0 +1,3 @@
+# one proxy per line, format: host:port  (http:// auto-prefixed)
+# or full URL with scheme: http://host:port  socks5://host:port
+# lines starting with # ignored
