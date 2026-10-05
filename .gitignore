@@ -2,5 +2,10 @@ __pycache__/
 *.pyc
 .env
 venv/
+.venv/
 .DS_Store
 cookies.txt
+.pytest_cache/
+.ruff_cache/
+cache/
+security-reports/

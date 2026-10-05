@@ -1,0 +1,66 @@
+# Dokploy Compose deployment of the api image that ci-local publishes to zot on pre-push.
+# Compose from Git (not an Application) so a GitHub push triggers Dokploy; the image is pulled, never built here.
+# localhost, not a service alias: the loki driver runs on the host, outside Docker DNS. The project label
+# separates this stack from the other products in the shared Loki that the monitoring stack runs.
+# Non-blocking so a slow Loki drops lines instead of stalling the app on stdout.
+x-loki-logging: &loki-logging
+  driver: loki
+  options:
+    loki-url: "${LOKI_URL:-http://localhost:3100}/loki/api/v1/push"
+    labels: "service_name"
+    loki-external-labels: "project=mydl"
+    loki-retries: "3"
+    mode: non-blocking
+    max-buffer-size: 4m
+
+services:
+  api:
+    image: 127.0.0.1:5000/mydl/api:${MYDL_IMAGE_TAG:-prod}
+    # A mutable :prod is only re-pulled when asked; pin MYDL_IMAGE_TAG to a sha- tag to roll back.
+    pull_policy: always
+    restart: unless-stopped
+    stop_grace_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      # Value-less keys are passed through when set in the Dokploy Environment tab and left to the app default otherwise.
+      PUBLIC_BASE:
+      CACHE_TTL_SEC:
+      CACHE_MAX_BYTES:
+      REQUEST_TIMEOUT_SEC:
+      MAX_PROXY_ATTEMPTS:
+    volumes:
+      # Downloaded files and the cache index. Disposable: entries expire after CACHE_TTL_SEC.
+      - mydl_cache:/app/cache
+    networks:
+      - dokploy-network
+    logging: *loki-logging
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+          cpus: "1.5"
+        reservations:
+          memory: 128M
+    labels:
+      - "service_name=mydl-api"
+      - "traefik.enable=true"
+      # Explicit service and priority keep these routers winning over any router a domain added in the Dokploy UI would inject.
+      - "traefik.http.routers.mydl-api.rule=Host(`${APP_DOMAIN:?set APP_DOMAIN in the Dokploy Environment tab}`)"
+      - "traefik.http.routers.mydl-api.entrypoints=websecure"
+      - "traefik.http.routers.mydl-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.mydl-api.service=mydl-api"
+      - "traefik.http.routers.mydl-api.priority=1000"
+      - "traefik.http.services.mydl-api.loadbalancer.server.port=3000"
+      - "traefik.http.routers.mydl-api-http.rule=Host(`${APP_DOMAIN}`)"
+      - "traefik.http.routers.mydl-api-http.entrypoints=web"
+      - "traefik.http.routers.mydl-api-http.middlewares=redirect-to-https@file"
+      - "traefik.http.routers.mydl-api-http.service=mydl-api"
+      - "traefik.http.routers.mydl-api-http.priority=1000"
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  mydl_cache:

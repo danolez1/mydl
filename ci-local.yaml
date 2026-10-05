@@ -1,0 +1,30 @@
+version: 1
+branches: [main]
+checks:
+  - name: test
+    run: uv run --no-project --python 3.14 --with-requirements requirements-dev.txt pytest -q
+images:
+  - name: api
+    image: mydl/api
+    compression: zstd
+    dockerfile: Dockerfile
+    context: .
+    # Files that cannot change the image, so edits there do not cause a rebuild.
+    tag_exclude:
+      [
+        .githooks,
+        tests,
+        scripts,
+        infra,
+        docs,
+        README.md,
+        ci-local.yaml,
+        devoop.sh,
+        app-cli.py,
+        formats.json,
+        Procfile,
+        requirements.in,
+        requirements-dev.in,
+        requirements-dev.txt,
+        .gitleaks.toml,
+      ]
