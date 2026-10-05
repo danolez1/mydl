@@ -7,9 +7,10 @@ import os
 import random
 import re
 import time
+from collections.abc import Iterable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Iterable, Literal
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 import httpx
@@ -545,14 +546,14 @@ async def post_download(video: VideoURL, request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 
 @app.get("/dl")
 async def get_dl(request: Request, url: str = Query(...), type: str = "video"):
     result = await fetch_or_cache(url, type == "audio", request)
     return templates.TemplateResponse(
-        "download.html", {"request": request, "dl_url": result["download_url"]}
+        request, "download.html", {"dl_url": result["download_url"]}
     )
 
 

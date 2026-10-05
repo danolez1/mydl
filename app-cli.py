@@ -1,6 +1,7 @@
-from utils import pick_best
+
 import yt_dlp
-import json
+
+from utils import pick_best
 
 
 def download(url, type="video"):

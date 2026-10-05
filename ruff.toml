@@ -1,0 +1,6 @@
+# Errors and unused code only; the code predates the linter, so formatting is left alone.
+target-version = "py314"
+
+[lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
