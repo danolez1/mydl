@@ -1,0 +1,5 @@
+#!/bin/sh
+set -e
+
+# The step is stamped per tree (scripts/hooks/step.sh), so the pre-push run does not repeat it.
+bash scripts/hooks/step.sh lint --tree index -- uv run --no-project --python 3.14 --with-requirements requirements-dev.txt ruff check .

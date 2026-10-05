@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+
+# git sends the ref lines once on stdin; later steps must not swallow them.
+refs=$(cat)
+
+# Each step is stamped per tree (scripts/hooks/step.sh), so a retried push skips what already passed.
+# Tests live in ci-local checks and the image build in ci-local itself, the last step below.
+bash scripts/hooks/step.sh audit-cve --tree head --ttl-hours 24 -- uv run --no-project --python 3.14 --with-requirements requirements-dev.txt pip-audit --requirement requirements.txt --require-hashes --disable-pip
+bash scripts/hooks/step.sh secrets --tree head -- gitleaks git --no-banner --redact
+
+# >>> ci-local (keep as the last step of this hook) >>>
+if command -v ci-local >/dev/null 2>&1; then
+  if [ -n "${refs:-}" ]; then
+    printf '%s\n' "$refs" | ci-local hook pre-push "$@" || exit 1
+  else
+    ci-local hook pre-push "$@" || exit 1
+  fi
+else
+  echo "ci-local: not installed, image not built" >&2
+fi
+# <<< ci-local <<<
