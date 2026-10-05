@@ -16,7 +16,7 @@ if [ "${#subject}" -gt 100 ]; then
   echo "commit-msg: the subject is ${#subject} characters, the limit is 100" >&2
   exit 1
 fi
-if grep -Eiq '^(Co-Authored-By:|Generated with)|noreply@anthropic\.com' "$file"; then
+if grep -Eiq '^Co-Authored-By:|Generated with|noreply@anthropic\.com' "$file"; then
   echo "commit-msg: attribution trailers are not allowed" >&2
   exit 1
 fi
