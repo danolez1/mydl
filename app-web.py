@@ -6,6 +6,7 @@ import mimetypes
 import os
 import random
 import re
+import ssl
 import time
 from collections.abc import Iterable
 from contextlib import asynccontextmanager
@@ -51,7 +52,15 @@ PROXY_SOURCES = [
         "https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=10000&country=all",
     ).split(",") if s.strip()
 ]
-PROXY_REFRESH_INTERVAL_SEC = int(os.getenv("PROXY_REFRESH_INTERVAL_SEC", str(86400)))
+PROXY_REFRESH_INTERVAL_SEC = int(os.getenv("PROXY_REFRESH_INTERVAL_SEC", str(12 * 3600)))
+PROXY_VERIFY_CONCURRENCY = int(os.getenv("PROXY_VERIFY_CONCURRENCY", "200"))
+PROXY_VERIFY_TIMEOUT_SEC = int(os.getenv("PROXY_VERIFY_TIMEOUT_SEC", "10"))
+PROXY_KEEP_MAX = int(os.getenv("PROXY_KEEP_MAX", "300"))
+PROXY_VERIFY_HOST = "www.youtube.com"
+PROXY_VERIFY_PATH = "/watch?v=dQw4w9WgXcQ"
+PROXY_VERIFY_COOKIE = "SOCS=CAI; CONSENT=PENDING+987"
+PROXY_VERIFY_OK_MARKER = '"playabilityStatus":{"status":"OK"'
+PROXY_VERIFY_MAX_BYTES = 600_000
 MAX_PROXY_ATTEMPTS = int(os.getenv("MAX_PROXY_ATTEMPTS", "20"))
 PROXY_BAN_FAILS = int(os.getenv("PROXY_BAN_FAILS", "3"))
 PROXY_BAN_SEC = int(os.getenv("PROXY_BAN_SEC", str(2 * 3600)))
@@ -335,16 +344,68 @@ async def fetch_proxies() -> list[str]:
     return sorted(merged)
 
 
+async def verify_proxy(proxy: str) -> bool:
+    """A proxy only counts when YouTube serves a playable watch page through it over TLS, because most listed ones connect but are blocked or dead."""
+    parsed = urlparse(proxy)
+    writer = None
+    try:
+        async with asyncio.timeout(PROXY_VERIFY_TIMEOUT_SEC):
+            reader, writer = await asyncio.open_connection(parsed.hostname, parsed.port)
+            writer.write(
+                f"CONNECT {PROXY_VERIFY_HOST}:443 HTTP/1.1\r\nHost: {PROXY_VERIFY_HOST}:443\r\n\r\n".encode()
+            )
+            await writer.drain()
+            head = await reader.readuntil(b"\r\n\r\n")
+            if b" 200" not in head.split(b"\r\n", 1)[0]:
+                return False
+            await writer.start_tls(ssl.create_default_context(), server_hostname=PROXY_VERIFY_HOST)
+            writer.write(
+                f"GET {PROXY_VERIFY_PATH} HTTP/1.1\r\nHost: {PROXY_VERIFY_HOST}\r\n"
+                f"User-Agent: {USER_AGENT}\r\nAccept-Language: en-US,en;q=0.9\r\nCookie: {PROXY_VERIFY_COOKIE}\r\n"
+                "Connection: close\r\n\r\n".encode()
+            )
+            await writer.drain()
+            body = b""
+            while len(body) < PROXY_VERIFY_MAX_BYTES:
+                chunk = await reader.read(65536)
+                if not chunk:
+                    break
+                body += chunk
+            text = body.decode("utf8", "ignore")
+            return text.startswith("HTTP/1.1 200") and PROXY_VERIFY_OK_MARKER in text
+    except (OSError, ssl.SSLError, asyncio.IncompleteReadError, asyncio.LimitOverrunError, TimeoutError):
+        return False
+    finally:
+        if writer:
+            writer.close()
+
+
+async def filter_viable(candidates: Iterable[str]) -> list[str]:
+    sem = asyncio.Semaphore(PROXY_VERIFY_CONCURRENCY)
+
+    async def check(proxy: str) -> str | None:
+        async with sem:
+            return proxy if await verify_proxy(proxy) else None
+
+    results = await asyncio.gather(*[check(p) for p in candidates])
+    return [p for p in results if p][:PROXY_KEEP_MAX]
+
+
 async def refresh_proxies() -> int:
     global PROXIES
-    new_list = await fetch_proxies()
+    candidates = sorted(set(await fetch_proxies()) | set(PROXIES))
+    viable = await filter_viable(candidates)
+    logger.info("proxy.verify candidates=%d viable=%d", len(candidates), len(viable))
+    if not viable:
+        logger.warning("proxy.refresh kept=%d because no candidate passed verification", len(PROXIES))
+        return len(PROXIES)
     async with _proxy_lock:
-        changed = set(new_list) != set(PROXIES)
+        changed = set(viable) != set(PROXIES)
         if changed:
-            Path(PROXY_FILE).write_text("\n".join(new_list) + "\n")
-            PROXIES = new_list
-    logger.info("proxy.refresh count=%d changed=%s", len(new_list), changed)
-    return len(new_list)
+            Path(PROXY_FILE).write_text("\n".join(viable) + "\n")
+            PROXIES = viable
+    logger.info("proxy.refresh count=%d changed=%s", len(viable), changed)
+    return len(viable)
 
 
 async def proxy_refresh_loop():

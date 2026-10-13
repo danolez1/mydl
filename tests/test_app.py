@@ -209,3 +209,61 @@ def test_index_and_download_pages_render(client, mod, monkeypatch):
 
 def test_dl_requires_a_url(client):
     assert client.get("/dl").status_code == 422
+
+
+def test_verify_proxy_rejects_unreachable_and_non_200_connect(mod):
+    import asyncio
+
+    async def refuse(reader, writer):
+        await reader.readuntil(b"\r\n\r\n")
+        writer.write(b"HTTP/1.1 403 Forbidden\r\n\r\n")
+        await writer.drain()
+        writer.close()
+
+    async def run():
+        server = await asyncio.start_server(refuse, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        async with server:
+            denied = await mod.verify_proxy(f"http://127.0.0.1:{port}")
+        closed = await mod.verify_proxy(f"http://127.0.0.1:{port}")
+        return denied, closed
+
+    assert asyncio.run(run()) == (False, False)
+
+
+def test_filter_viable_keeps_only_passing_proxies_up_to_the_cap(mod, monkeypatch):
+    import asyncio
+
+    async def fake(proxy):
+        return proxy.endswith(("1", "2", "3"))
+
+    monkeypatch.setattr(mod, "verify_proxy", fake)
+    monkeypatch.setattr(mod, "PROXY_KEEP_MAX", 2)
+    got = asyncio.run(mod.filter_viable(["http://a:1", "http://a:2", "http://a:3", "http://a:4"]))
+    assert got == ["http://a:1", "http://a:2"]
+
+
+def test_refresh_stores_only_viable_and_keeps_old_list_when_none_pass(mod, monkeypatch, tmp_path):
+    import asyncio
+
+    async def source():
+        return ["http://a:1", "http://a:2"]
+
+    monkeypatch.setattr(mod, "fetch_proxies", source)
+    monkeypatch.setattr(mod, "PROXY_FILE", str(tmp_path / "p.txt"))
+    mod.PROXIES[:] = ["http://old:9"]
+
+    async def only_one(proxy):
+        return proxy == "http://a:2"
+
+    monkeypatch.setattr(mod, "verify_proxy", only_one)
+    assert asyncio.run(mod.refresh_proxies()) == 1
+    assert mod.PROXIES == ["http://a:2"]
+    assert (tmp_path / "p.txt").read_text() == "http://a:2\n"
+
+    async def none(proxy):
+        return False
+
+    monkeypatch.setattr(mod, "verify_proxy", none)
+    assert asyncio.run(mod.refresh_proxies()) == 1
+    assert mod.PROXIES == ["http://a:2"]
