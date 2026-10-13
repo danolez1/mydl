@@ -267,3 +267,17 @@ def test_refresh_stores_only_viable_and_keeps_old_list_when_none_pass(mod, monke
     monkeypatch.setattr(mod, "verify_proxy", none)
     assert asyncio.run(mod.refresh_proxies()) == 1
     assert mod.PROXIES == ["http://a:2"]
+
+
+def test_is_public_proxy_rejects_private_loopback_and_metadata_addresses(mod):
+    for proxy in (
+        "http://127.0.0.1:8080",
+        "http://10.1.2.3:80",
+        "http://169.254.169.254:80",
+        "http://192.168.1.5:3128",
+        "http://172.20.0.2:80",
+        "http://100.64.0.9:80",
+    ):
+        assert not mod.is_public_proxy(proxy)
+    assert mod.is_public_proxy("http://8.8.4.4:80")
+    assert mod.is_public_proxy("http://1.1.1.1:8080")

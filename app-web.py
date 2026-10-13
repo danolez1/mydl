@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import ipaddress
 import json
 import logging
 import mimetypes
@@ -324,12 +325,17 @@ def download_to_disk(proxy: str | None, url: str, audio: bool, key: str) -> tupl
 # ----- proxy refresh -----
 
 
+def is_public_proxy(proxy: str) -> bool:
+    """A poisoned list must not be able to point the server at its own network or a cloud metadata address."""
+    return ipaddress.ip_address(urlparse(proxy).hostname).is_global
+
+
 async def fetch_proxies() -> list[str]:
     async def fetch_one(client: httpx.AsyncClient, src: str) -> tuple[str, list[str]]:
         try:
             r = await client.get(src)
             r.raise_for_status()
-            parsed = parse_proxy_lines(r.text.splitlines())
+            parsed = [p for p in parse_proxy_lines(r.text.splitlines()) if is_public_proxy(p)]
             logger.info("proxy.source.ok src=%s parsed=%d", src, len(parsed))
             return src, parsed
         except Exception as e:
