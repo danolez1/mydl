@@ -327,7 +327,10 @@ def download_to_disk(proxy: str | None, url: str, audio: bool, key: str) -> tupl
 
 def is_public_proxy(proxy: str) -> bool:
     """A poisoned list must not be able to point the server at its own network or a cloud metadata address."""
-    return ipaddress.ip_address(urlparse(proxy).hostname).is_global
+    try:
+        return ipaddress.ip_address(urlparse(proxy).hostname).is_global
+    except ValueError:
+        return False
 
 
 async def fetch_proxies() -> list[str]:

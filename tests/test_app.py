@@ -281,3 +281,7 @@ def test_is_public_proxy_rejects_private_loopback_and_metadata_addresses(mod):
         assert not mod.is_public_proxy(proxy)
     assert mod.is_public_proxy("http://8.8.4.4:80")
     assert mod.is_public_proxy("http://1.1.1.1:8080")
+
+
+def test_is_public_proxy_rejects_an_unparseable_address_instead_of_raising(mod):
+    assert not mod.is_public_proxy("http://999.1.1.1:80")
