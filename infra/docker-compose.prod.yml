@@ -10,6 +10,9 @@ x-loki-logging: &loki-logging
     labels: "service_name"
     loki-external-labels: "project=mydl"
     loki-retries: "3"
+    # The driver keeps a local json cache for docker logs that is never rotated without these.
+    max-size: "10m"
+    max-file: "3"
     mode: non-blocking
     max-buffer-size: 4m
 
